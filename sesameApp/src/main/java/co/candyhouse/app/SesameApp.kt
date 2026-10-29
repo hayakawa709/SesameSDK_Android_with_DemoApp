@@ -37,7 +37,7 @@ class SesameApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        FirebaseCrashlytics.getInstance().apply {
+        if (BuildConfig.FIREBASE_ENABLED) FirebaseCrashlytics.getInstance().apply {
             isCrashlyticsCollectionEnabled = !BuildConfig.DEBUG
             if (BuildConfig.DEBUG) deleteUnsentReports()
         }

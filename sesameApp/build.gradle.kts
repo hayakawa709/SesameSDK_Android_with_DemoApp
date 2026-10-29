@@ -8,6 +8,7 @@ plugins {
 }
 
 val rootExtra = rootProject.extra
+val widgetFirebase = providers.gradleProperty("homeWidgetFirebase").orNull == "true"
 
 android {
     namespace = "co.candyhouse.app"
@@ -53,13 +54,17 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "WEB_ORIGIN", "\"${rootExtra["candyhouse.sesame.web.dev"]}\"")
+            applicationIdSuffix = ".homewidgetdev"
+            versionNameSuffix = "-homewidget-dev3"
+            buildConfigField("boolean", "FIREBASE_ENABLED", widgetFirebase.toString())
+            buildConfigField("String", "WEB_ORIGIN", "\"${providers.gradleProperty("homeWidgetWebOrigin").orNull ?: rootExtra["candyhouse.sesame.web.dev"]}\"")
             manifestPlaceholders["crashlyticsCollectionEnabled"] = "false"
             configure<CrashlyticsExtension> { mappingFileUploadEnabled = false }
             isMinifyEnabled = false
         }
 
         release {
+            buildConfigField("boolean", "FIREBASE_ENABLED", "true")
             buildConfigField("String", "WEB_ORIGIN", "\"${rootExtra["candyhouse.sesame.web.prod"]}\"")
             manifestPlaceholders["crashlyticsCollectionEnabled"] = "true"
             isMinifyEnabled = true
@@ -97,6 +102,12 @@ android {
     buildFeatures {
         buildConfig = true
     }
+}
+
+// The public Firebase file is a sample and has no client for the isolated package.
+// Supply a genuine file containing that client and opt in explicitly to enable FCM.
+tasks.configureEach {
+    if (name == "processDebugGoogleServices" && !widgetFirebase) enabled = false
 }
 
 androidComponents {

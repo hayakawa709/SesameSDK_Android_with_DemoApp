@@ -1,6 +1,7 @@
 package co.candyhouse.app.push
 
 import android.content.Context
+import co.candyhouse.app.BuildConfig
 import androidx.core.content.edit
 import co.candyhouse.app.util.AppIdentity
 import co.candyhouse.sesame.utils.L
@@ -19,6 +20,7 @@ class TopicSubscriptionManager(context: Context) {
     val changes = events.asSharedFlow()
 
     fun refreshToken() {
+        if (!BuildConfig.FIREBASE_ENABLED) return
         FirebaseMessaging.getInstance().token.addOnSuccessListener(::onNewToken)
     }
 
@@ -31,6 +33,7 @@ class TopicSubscriptionManager(context: Context) {
     }
 
     suspend fun token(): String = suspendCancellableCoroutine { continuation ->
+        if (!BuildConfig.FIREBASE_ENABLED) { continuation.resume(""); return@suspendCancellableCoroutine }
         FirebaseMessaging.getInstance().token.addOnSuccessListener {
             if (continuation.isActive) continuation.resume(it)
         }.addOnFailureListener {
