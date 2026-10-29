@@ -47,5 +47,6 @@ class SesameApp : Application() {
         CHBleSupport.initialize(bleBackend, DeviceKeyDatabase.Keys, BuildConfig.AWS_IDENTITY_POOL_ID)
         CHBleManager(this)
         subscriptionManager = TopicSubscriptionManager(this)
+        ble.observers.add { co.candyhouse.app.homewidget.SesameHomeWidgetProvider.refresh(this) }
     }
 }

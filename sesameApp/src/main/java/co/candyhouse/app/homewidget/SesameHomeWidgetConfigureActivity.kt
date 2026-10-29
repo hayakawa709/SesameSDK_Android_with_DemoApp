@@ -41,6 +41,7 @@ class SesameHomeWidgetConfigureActivity : Activity() {
                     if (app.ble.device(uuid)?.let(HomeWidgetStore::supports) != true) { title.setText(R.string.home_widget_no_keys); return@setOnItemClickListener }
                     if (!HomeWidgetStore(this@SesameHomeWidgetConfigureActivity).save(id, uuid)) { title.setText(R.string.home_widget_failed); return@setOnItemClickListener }
                     SesameHomeWidgetProvider.update(this@SesameHomeWidgetConfigureActivity, id)
+                    co.candyhouse.app.connecteddevice.SesameConnectedDeviceService.sync(this@SesameHomeWidgetConfigureActivity)
                     setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)); finish()
                 }
             } catch (_: Exception) { title.setText(R.string.home_widget_failed) }

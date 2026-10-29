@@ -111,7 +111,7 @@ class SesameConnectedDeviceService : Service() {
                 SERVICE_ID,
                 NotificationCompat.Builder(this, SERVICE_CHANNEL).setSmallIcon(R.drawable.ic_notification).setContentTitle(getString(R.string.Sesame)).setContentText(
                     getString(
-                        if (app.ble.allDevices()
+                        if (SesameHomeWidgetProvider.hasTargets(this)) R.string.home_widget_monitor else if (app.ble.allDevices()
                                 .any { app.devicePreferences.enabled("wid", it.deviceId.toString()) }
                         ) R.string.sesame_widget else R.string.auto_unlock_service_notification
                     )
@@ -126,7 +126,7 @@ class SesameConnectedDeviceService : Service() {
         }
         if (intent?.action == SesameHomeWidgetProvider.ACTION || intent?.hasExtra(SesameHomeWidgetProvider.EXTRA_ID) == true) {
             homeCommand(intent)
-            return START_NOT_STICKY
+            return START_STICKY // Restart monitoring only; a null Intent never replays a command.
         }
         // Widget button press: vibrate immediately, same 100ms as the device list switch.
         if (intent?.getStringExtra("operation") != null) runCatching { vibrate(100) }
@@ -231,7 +231,7 @@ class SesameConnectedDeviceService : Service() {
             }
             val armed =
                 app.ble.allDevices().any { app.devicePreferences.enabled("nohand", it.deviceId.toString()) && app.devicePreferences.enabled("nohandg", it.deviceId.toString()) }
-            if ((!manager.areNotificationsEnabled() || widgets.isEmpty()) && !armed && pendingCommands == 0) stopSelf()
+            if ((!manager.areNotificationsEnabled() || widgets.isEmpty()) && !armed && pendingCommands == 0 && !SesameHomeWidgetProvider.hasTargets(this@SesameConnectedDeviceService)) stopSelf()
         }
     }
 
@@ -298,6 +298,7 @@ class SesameConnectedDeviceService : Service() {
         live = null; app.ble.observers.remove(observer); app.ble.stopBackground(); unregisterReceiver(bluetooth); network.unregisterNetworkCallback(networkCallback)
         shown.forEach { NotificationManagerCompat.from(this).cancel(it) }; app.stopBackgroundWeb()
         if (!app.activityPresent) app.ble.close()
+        SesameHomeWidgetProvider.refresh(this)
         scope.cancel(); super.onDestroy()
     }
 
@@ -310,7 +311,7 @@ class SesameConnectedDeviceService : Service() {
         var live: SesameConnectedDeviceService? = null; private set
         fun sync(context: Context) {
             val app = context.applicationContext as SesameApp
-            val needed = app.ble.allDevices().any {
+            val needed = SesameHomeWidgetProvider.hasTargets(context) || app.ble.allDevices().any {
                 val id = it.deviceId.toString(); (app.devicePreferences.enabled("wid", id) && NotificationManagerCompat.from(context)
                 .areNotificationsEnabled()) || (app.devicePreferences.enabled("nohand", id) && app.devicePreferences.enabled("nohandg", id))
             }

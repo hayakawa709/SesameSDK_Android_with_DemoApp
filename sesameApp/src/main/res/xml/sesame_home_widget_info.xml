@@ -1,5 +1,5 @@
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="40dp" android:minHeight="40dp" android:targetCellWidth="1" android:targetCellHeight="1"
+    android:minWidth="110dp" android:minHeight="40dp" android:targetCellWidth="2" android:targetCellHeight="1"
     android:initialLayout="@layout/sesame_home_widget" android:previewLayout="@layout/sesame_home_widget"
     android:resizeMode="none" android:widgetCategory="home_screen" android:updatePeriodMillis="0"
     android:configure="co.candyhouse.app.homewidget.SesameHomeWidgetConfigureActivity" />
