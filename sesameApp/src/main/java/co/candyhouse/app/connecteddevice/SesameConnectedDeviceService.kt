@@ -25,6 +25,12 @@ import androidx.core.content.ContextCompat
 import co.candyhouse.app.R
 import co.candyhouse.app.SesameActivity
 import co.candyhouse.app.SesameApp
+import co.candyhouse.app.homewidget.HomeWidgetStore
+import co.candyhouse.app.homewidget.SesameHomeWidgetProvider
+import co.candyhouse.app.homewidget.WidgetCommandGate
+import co.candyhouse.app.homewidget.WidgetCommandPolicy
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import co.candyhouse.app.util.vibrate
 import co.candyhouse.sesame.ble.CHDeviceLoginStatus
 import co.candyhouse.sesame.ble.CHDeviceStatus
@@ -50,6 +56,10 @@ class SesameConnectedDeviceService : Service() {
     private val shown = mutableSetOf<Int>()
     private var updates: Job? = null
     private var pendingCommands = 0
+    private val homeGate by lazy {
+        val prefs = getSharedPreferences("home_widget_commands", MODE_PRIVATE)
+        WidgetCommandGate({ prefs.getLong(it, Long.MIN_VALUE) }, { key, value -> check(prefs.edit().putLong(key, value).commit()) })
+    }
     private var widgetChannel = CHANNEL
     private val network by lazy { getSystemService(ConnectivityManager::class.java) }
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -108,7 +118,15 @@ class SesameConnectedDeviceService : Service() {
                 ).setOngoing(true).setSilent(true).setOnlyAlertOnce(true).setPriority(NotificationCompat.PRIORITY_LOW).build()
             )
         } catch (e: RuntimeException) {
+            if (intent?.action == SesameHomeWidgetProvider.ACTION) {
+                val widget = intent.getIntExtra(SesameHomeWidgetProvider.EXTRA_ID, -1)
+                if (widget in SesameHomeWidgetProvider.ids(this)) SesameHomeWidgetProvider.update(this, widget, getString(R.string.home_widget_failed))
+            }
             L.e("SesameWidget", "Unable to start connected service", e); stopSelf(); return START_NOT_STICKY
+        }
+        if (intent?.action == SesameHomeWidgetProvider.ACTION || intent?.hasExtra(SesameHomeWidgetProvider.EXTRA_ID) == true) {
+            homeCommand(intent)
+            return START_NOT_STICKY
         }
         // Widget button press: vibrate immediately, same 100ms as the device list switch.
         if (intent?.getStringExtra("operation") != null) runCatching { vibrate(100) }
@@ -134,6 +152,54 @@ class SesameConnectedDeviceService : Service() {
             }
         } finally {
             pendingCommands--; refresh()
+        }
+    }
+
+    private fun homeCommand(intent: Intent) {
+        val widget = intent.getIntExtra(SesameHomeWidgetProvider.EXTRA_ID, -1)
+        val uuid = HomeWidgetStore(this).device(widget)
+        if (intent.action != SesameHomeWidgetProvider.ACTION || !WidgetCommandPolicy.allows(
+                widget in SesameHomeWidgetProvider.ids(this), uuid, intent.getStringExtra("deviceUUID"), intent.getStringExtra("operation")) || uuid == null) {
+            refresh(); return
+        }
+        if (getSystemService(android.app.KeyguardManager::class.java).isDeviceLocked) {
+            SesameHomeWidgetProvider.status(this, uuid, getString(R.string.home_widget_failed)); refresh(); return
+        }
+        val accepted = runCatching { homeGate.acquire(uuid, System.currentTimeMillis()) }.getOrDefault(false)
+        if (!accepted) { refresh(); return }
+        pendingCommands++ // Reserve synchronously, before restoreSaved can suspend or observers stop the service.
+        L.d("SesameHomeWidget", "Home widget command accepted by service")
+        SesameHomeWidgetProvider.status(this, uuid, getString(R.string.home_widget_busy))
+        runCatching { vibrate(100) }
+        scope.launch {
+            var status = R.string.home_widget_failed
+            try {
+                withTimeout(30_000L) {
+                    app.ble.restoreSaved()
+                    check(app.ble.device(uuid)?.let(HomeWidgetStore::supports) == true)
+                    app.ble.startBackground()
+                    app.ensureBackgroundWeb()
+                    // Allow a cold-start BLE connection before falling back through the existing cloud path.
+                    val deadline = android.os.SystemClock.elapsedRealtime() + 4_000
+                    while (app.ble.device(uuid)?.deviceStatus?.value != CHDeviceLoginStatus.logined && android.os.SystemClock.elapsedRealtime() < deadline) delay(100)
+                    check(HomeWidgetStore(this@SesameConnectedDeviceService).device(widget).equals(uuid, true))
+                    check(widget in SesameHomeWidgetProvider.ids(this@SesameConnectedDeviceService))
+                    check(app.ble.device(uuid)?.let(HomeWidgetStore::supports) == true)
+                    app.ble.quickCommand(uuid, "toggle")
+                }
+                status = R.string.home_widget_sent
+                L.d("SesameHomeWidget", "Home widget command acknowledged; physical state not inferred")
+            } catch (_: TimeoutCancellationException) {
+                status = R.string.home_widget_timeout
+                L.d("SesameHomeWidget", "Command timeout; physical state unknown")
+            } catch (e: CancellationException) { throw e
+            } catch (_: Exception) {
+                L.d("SesameHomeWidget", "Command failed; check keys, permissions and connectivity")
+            } finally {
+                runCatching { homeGate.complete(uuid, System.currentTimeMillis()) }
+                SesameHomeWidgetProvider.status(this@SesameConnectedDeviceService, uuid, getString(status))
+                pendingCommands--; refresh()
+            }
         }
     }
 
@@ -249,6 +315,7 @@ class SesameConnectedDeviceService : Service() {
                 .areNotificationsEnabled()) || (app.devicePreferences.enabled("nohand", id) && app.devicePreferences.enabled("nohandg", id))
             }
             if (!needed) {
+                if ((live?.pendingCommands ?: 0) > 0) return
                 context.stopService(Intent(context, SesameConnectedDeviceService::class.java)); return
             }
             try {

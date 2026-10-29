@@ -125,6 +125,7 @@ androidComponents {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation(project(":sesameSdk"))
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)

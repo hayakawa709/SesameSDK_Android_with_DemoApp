@@ -1,0 +1,11 @@
+<resources>
+    <string name="home_widget_label">SESAME 1×1</string>
+    <string name="home_widget_unconfigured">未设置</string>
+    <string name="home_widget_idle">点击操作</string>
+    <string name="home_widget_busy">操作中…</string>
+    <string name="home_widget_sent">指令已响应</string>
+    <string name="home_widget_failed">失败，请检查锁</string>
+    <string name="home_widget_timeout">超时，请检查锁</string>
+    <string name="home_widget_choose">选择 SESAME</string>
+    <string name="home_widget_no_keys">没有支持的钥匙。请在开发版 SESAME 应用中登录，通过正常注册或分享添加钥匙，然后重新添加小组件。</string>
+</resources>
